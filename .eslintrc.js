@@ -8,5 +8,6 @@ module.exports = {
   ],
   rules: {
     'vue/valid-template-root': 'off',
+    'vue/valid-v-model': 'off',
   },
 };

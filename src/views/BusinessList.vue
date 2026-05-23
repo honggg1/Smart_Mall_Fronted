@@ -1,56 +1,21 @@
 <template>
   <div class="wrapper">
-    <!-- 顶部导航栏 -->
-    <van-nav-bar style="background: linear-gradient(to right,#fff1eb,#ace0f9)" fixed>
-      <template #title>
-      </template>
-      <template #left>
-        <van-icon v-if="isLogin()" name="bell" badge="99+" class="accountId-icon" />
-        <van-icon v-else name="user-circle-o" class="accountId-icon" @click="toLogin()"/>
-        <span v-if="isLogin()" class="accountId">{{ account.accountName }}</span>
-        <span v-else class="accountId" @click="toLogin()">未登录</span>
-      </template>
-      <template #right>
-        <van-image v-if="isLogin()" round width="9vw" height="9vw" :src="account.accountImg"/>
-      </template>
-    </van-nav-bar>
+    <NavBar :title="currentCategoryName" />
 
-    <!-- 占位 -->
-    <div style="padding-top:42px"></div>
-
-    <!-- 搜索栏 -->
-    <van-sticky :offset-top="46">
-      <van-search v-model="searchTxt" shape="round" background="linear-gradient(to right,#fff1eb,#ace0f9)" placeholder="请输入搜索关键词"/>
-    </van-sticky>
-
-    <!-- 分类导航 -->
-    <div class="category-section">
-      <div class="category-more" @click="toCategoryList">
-        <span>全部分类</span>
-        <van-icon name="arrow" />
-      </div>
-      <ul class="category-ul">
-        <li v-for="item in displayCategories" :key="item.categoryId" @click="toCategory(item.categoryId, item.categoryName)">
+    <!-- 水平分类选择器 -->
+    <div class="category-selector">
+      <div class="category-scroll" ref="categoryScrollRef">
+        <div
+          v-for="item in categories"
+          :key="item.categoryId"
+          class="category-chip"
+          :class="{ active: selectedCategoryId === item.categoryId }"
+          @click="onSelectCategory(item)"
+        >
           <img :src="getCategoryImg(item.categoryCover)" />
-          <p>{{ item.categoryName }}</p>
-        </li>
-      </ul>
-    </div>
-
-    <!-- 轮播图 -->
-    <div class="banner-section">
-      <van-swipe class="my-swipe" :autoplay="3000" :height="135" indicator-color="#009966">
-        <van-swipe-item v-for="(banner, idx) in banners" :key="idx">
-          <img :src="banner" />
-        </van-swipe-item>
-      </van-swipe>
-    </div>
-
-    <!-- 推荐商家标题 -->
-    <div class="show-business">
-      <div class="show-business-line"></div>
-      <p>推荐商家</p>
-      <div class="show-business-line"></div>
+          <span>{{ item.categoryName }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- 商家列表 -->
@@ -63,7 +28,7 @@
         offset="10"
       >
         <ul class="business">
-          <li v-for="item in businessList" :key="item.businessId" @click="toBusinessDetail(item.businessId)">
+          <li v-for="item in pagedBusinessList" :key="item.businessId" @click="toBusinessDetail(item.businessId)">
             <div class="img-wrapper">
               <div class="business-feature" :class="getFeatureClass(item.featureTag)">{{ item.featureTag || '新店' }}</div>
               <img :src="getBusinessImg(item.businessImg)" @error="onImgError" />
@@ -91,98 +56,114 @@
             </div>
           </li>
         </ul>
+        <van-empty v-if="!loadingMore && allBusinesses.length === 0" description="该分类暂无商家" />
       </van-list>
     </van-pull-refresh>
 
-    <Footer></Footer>
+    <Footer />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import Footer from "@/components/Footer.vue"
-import { getSessionStorage } from "@/common.js"
-import { useRouter } from "vue-router"
-import { get } from "@/api/index.js"
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import Footer from '@/components/Footer.vue'
+import NavBar from '@/components/NavBar.vue'
+import { get } from '@/api/index.js'
 import defaultCategoryImg from '@/assets/category/cat01-meishi.svg'
 
-const searchTxt = ref('')
+const router = useRouter()
+const route = useRoute()
+
 const refreshing = ref(false)
 const loadingMore = ref(false)
 const finished = ref(false)
-
-const router = useRouter()
-
-const toLogin = () => {
-  router.push('/login')
-}
-
-// ==================== 账户 ====================
-const account = getSessionStorage('account')
-const isLogin = () => getSessionStorage('account') != null
-
-// ==================== 轮播图 ====================
-const banners = [
-  new URL('@/assets/index_banner_1.png', import.meta.url).href,
-  new URL('@/assets/index_banner_2.png', import.meta.url).href,
-  new URL('@/assets/index_banner_3.png', import.meta.url).href,
-]
+const currentPage = ref(1)
+const pageSize = 10
 
 // ==================== 分类 ====================
-const allCategories = ref([])
-const displayCategories = computed(() => allCategories.value.slice(0, 10))
+const categories = ref([])
+const selectedCategoryId = ref(null)
+
+const currentCategoryName = computed(() => {
+  const cat = categories.value.find(c => c.categoryId === selectedCategoryId.value)
+  return cat ? cat.categoryName : (route.query.categoryName || '全部分类')
+})
 
 const loadCategories = () => {
   return get('/category/list').then(res => {
     if (res.data.code === 20000) {
-      allCategories.value = res.data.resultData || []
+      categories.value = res.data.resultData || []
     }
   }).catch(e => console.log('分类加载失败', e))
 }
 
-const toCategory = (id, name) => {
-  router.push({ path: '/categoryList', query: { categoryId: id, categoryName: name } })
+const initSelectedCategory = () => {
+  if (categories.value.length === 0) return
+  const queryId = route.query.categoryId
+  if (queryId) {
+    const match = categories.value.find(c => String(c.categoryId) === String(queryId))
+    selectedCategoryId.value = match ? match.categoryId : categories.value[0].categoryId
+  } else {
+    selectedCategoryId.value = categories.value[0].categoryId
+  }
 }
 
-const toCategoryList = () => {
-  router.push('/categoryList')
+const onSelectCategory = (item) => {
+  if (selectedCategoryId.value === item.categoryId) return
+  selectedCategoryId.value = item.categoryId
+  currentPage.value = 1
+  finished.value = false
+  allBusinesses.value = []
+  loadBusinesses(item.categoryId)
+  scrollToSelectedChip()
 }
+
+const scrollToSelectedChip = () => {
+  nextTick(() => {
+    const container = categoryScrollRef.value
+    if (!container) return
+    const chip = container.querySelector('.category-chip.active')
+    if (chip) {
+      chip.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' })
+    }
+  })
+}
+
+const categoryScrollRef = ref(null)
 
 // ==================== 商家列表 ====================
-const businessList = ref([])
-const pageSize = 10
-let currentPage = 1
+const allBusinesses = ref([])
 
-const loadBusinessList = () => {
-  return get('/business/list').then(res => {
+const pagedBusinessList = computed(() => {
+  return allBusinesses.value.slice(0, currentPage.value * pageSize)
+})
+
+const loadBusinesses = (categoryId) => {
+  const url = categoryId
+    ? `/business/listByCategory?categoryId=${categoryId}`
+    : '/business/list'
+  return get(url).then(res => {
     if (res.data.code === 20000) {
-      const all = res.data.resultData || []
-      businessList.value = all.slice(0, pageSize)
-      currentPage = 1
-      finished.value = businessList.value.length >= all.length
+      allBusinesses.value = res.data.resultData || []
     }
   }).catch(e => console.log('商家加载失败', e))
 }
 
 const onLoadMore = () => {
   loadingMore.value = true
-  get('/business/list').then(res => {
-    if (res.data.code === 20000) {
-      const all = res.data.resultData || []
-      currentPage++
-      const next = all.slice(0, currentPage * pageSize)
-      businessList.value = next
-      finished.value = next.length >= all.length
-    }
+  currentPage.value++
+  nextTick(() => {
+    finished.value = currentPage.value * pageSize >= allBusinesses.value.length
     loadingMore.value = false
-  }).catch(() => {
-    loadingMore.value = false
-    finished.value = true
   })
 }
 
 const onRefresh = () => {
-  Promise.all([loadCategories(), loadBusinessList()]).finally(() => {
+  Promise.all([loadCategories(), loadBusinesses(selectedCategoryId.value)]).then(() => {
+    initSelectedCategory()
+    currentPage.value = 1
+    finished.value = pagedBusinessList.value.length >= allBusinesses.value.length
     refreshing.value = false
   })
 }
@@ -228,71 +209,87 @@ const toBusinessDetail = (businessId) => {
 }
 
 // ==================== 初始化 ====================
-onMounted(() => {
-  loadCategories()
-  loadBusinessList()
+onMounted(async () => {
+  await loadCategories()
+  initSelectedCategory()
+  await loadBusinesses(selectedCategoryId.value)
+  nextTick(() => {
+    scrollToSelectedChip()
+    finished.value = pagedBusinessList.value.length >= allBusinesses.value.length
+  })
 })
 </script>
 
 <style scoped>
 .wrapper { width: 100%; height: 100%; background: #f8f8f8; }
 
-/* ===== 导航栏 ===== */
-.accountId-icon { color: #009966; font-size: 6vw; }
-.accountId {
-  margin-left: 1.2vw; font-size: 4vw; font-weight: 600; color: #494949;
+/* ===== 分类选择器 ===== */
+.category-selector {
+  background: #fff;
+  padding: 2vw 0;
+  box-shadow: 0 0.5vw 2vw rgba(0,0,0,0.05);
 }
 
-/* ===== 分类 ===== */
-.category-section {
-  background: #fff; margin: 2vw 3vw; border-radius: 3vw; padding: 3vw 0;
-  box-shadow: 0 1vw 2vw rgba(0,0,0,0.04);
-  position: relative;
-}
-.category-more {
-  position: absolute; right: 2.5vw; top: 2vw;
-  display: flex; align-items: center; gap: 0.5vw;
-  font-size: 3vw; color: #fb8b06; font-weight: 600;
-  background: #fff8e8; border: 0.2vw solid #ffde09;
-  border-radius: 2vw; padding: 0.8vw 2.5vw;
-  cursor: pointer; user-select: none; z-index: 2;
-  box-shadow: 0 0.3vw 0.8vw rgba(0,0,0,0.08);
-}
-.category-ul {
-  width: 100%; display: flex; flex-wrap: wrap; justify-content: space-around; align-items: center;
-}
-.category-ul li {
-  width: 18vw; display: flex; flex-direction: column; align-items: center;
-  padding: 1.5vw 0; cursor: pointer; user-select: none;
-}
-.category-ul li img {
-  width: 11vw; height: 11vw; border-radius: 2vw; object-fit: cover;
-}
-.category-ul li p {
-  margin-top: 1.5vw; font-size: 3vw; color: #555;
+.category-scroll {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: 0 2vw;
+  gap: 2vw;
 }
 
-/* ===== 轮播图 ===== */
-.banner-section {
-  margin: 0 3vw;
-}
-.my-swipe {
-  border-radius: 3vw; overflow: hidden;
-}
-.my-swipe .van-swipe-item img {
-  width: 100%; height: 100%; object-fit: cover;
+.category-scroll::-webkit-scrollbar {
+  display: none;
 }
 
-/* ===== 推荐商家标题 ===== */
-.show-business {
-  width: 100%; height: 10vw; display: flex; align-items: center; justify-content: center;
+.category-chip {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 22vw;
+  padding: 2vw 0;
+  border-radius: 2vw;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s, transform 0.2s;
 }
-.show-business-line { width: 28vw; height: 0.1vw; background-color: #cc9; }
-.show-business p { font-size: 4vw; margin: 0 4vw; color: #cc9; font-weight: 600; }
+
+.category-chip img {
+  width: 10vw;
+  height: 10vw;
+  border-radius: 2vw;
+  object-fit: cover;
+  margin-bottom: 1vw;
+}
+
+.category-chip span {
+  font-size: 3vw;
+  color: #555;
+  white-space: nowrap;
+}
+
+.category-chip.active {
+  background: linear-gradient(to right, #fff1eb, #ace0f9);
+}
+
+.category-chip.active span {
+  color: #333;
+  font-weight: 700;
+}
+
+.category-chip:active {
+  transform: scale(0.95);
+}
 
 /* ===== 商家列表 ===== */
 .business {
-  width: 100%; padding: 0 3vw 15vw; box-sizing: border-box;
+  width: 100%; padding: 3vw 3vw 15vw; box-sizing: border-box;
 }
 .business li {
   width: 100%; box-sizing: border-box; padding: 3vw;
@@ -305,7 +302,6 @@ onMounted(() => {
   transform: scale(0.98); box-shadow: 0 0.3vw 1.2vw rgba(0,0,0,0.08);
 }
 
-/* 图片区域 */
 .business .img-wrapper {
   width: 22vw; flex-shrink: 0; position: relative;
   border-radius: 2vw; overflow: hidden;
@@ -317,7 +313,6 @@ onMounted(() => {
   position: absolute; top: -1.5vw; right: 1vw; z-index: 2;
 }
 
-/* 特色标签 — 斜角不超出图片 */
 .business-feature {
   width: 16vw; height: 3.6vw; font-weight: 600; font-size: 2.1vw; color: #fff;
   position: absolute; left: -3.5vw; top: 0.5vw;
@@ -333,19 +328,16 @@ onMounted(() => {
 .feature-health    { background-color: #2ed573; border-bottom: 0.1vw solid #1abc9c; }
 .feature-popular   { background-color: #ff4757; border-bottom: 0.1vw solid #c44569; }
 
-/* 商家信息 */
 .business-info {
   flex: 1; padding-left: 2.5vw; overflow: hidden; min-width: 0;
 }
 
-/* Row1: 商家名称 — 与Row2星级左对齐 */
 .business-info-name {
   font-size: 4vw; color: #222; font-weight: 700;
   margin: 0 0 1.2vw 0; padding: 0;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 
-/* Row2: 星级评分月售（左）+ 配送标签（右） */
 .business-info-row2 {
   display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 1.2vw;
@@ -354,7 +346,6 @@ onMounted(() => {
   display: flex; align-items: center; font-size: 2.8vw; white-space: nowrap; flex-shrink: 0;
   margin: 0; padding: 0;
 }
-/* 消除van-rate默认内边距，使第一颗星与商家名称左对齐 */
 .business-info-star :deep(.van-rate) {
   padding-left: 0; margin-left: 0;
 }
@@ -369,14 +360,12 @@ onMounted(() => {
   padding: 0.3vw 1.5vw; white-space: nowrap; flex-shrink: 0;
 }
 
-/* Row3: 起送价 | 配送费 */
 .business-info-delivery {
   display: flex; align-items: center; color: #888; font-size: 2.7vw;
   margin-bottom: 1.2vw; gap: 1.5vw;
 }
 .delivery-split { color: #ddd; }
 
-/* Row4: 商家描述 */
 .business-info-explain { display: flex; align-items: center; }
 .business-info-explain span {
   border: 0.1vw solid #eee; font-size: 2.5vw; color: #999; border-radius: 0.8vw;

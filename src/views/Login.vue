@@ -17,7 +17,7 @@
   </div>
 </template>
 <script setup>
-import { Form, Field, CellGroup, Button, Notify } from 'vant';
+import { showNotify } from 'vant';
 import Footer from "@/components/Footer.vue";
 import NavBar from "@/components/NavBar.vue";
 import { ref, reactive } from 'vue';
@@ -46,7 +46,7 @@ const onLogin = ()=>{
   let url = "/account/login";
   post(url,account,true).then((response)=>{
     if(response.data.code==20000){
-      Notify({ 
+      showNotify({ 
         type: 'success', 
         message: '用户登录成功',
         duration: 2000,
@@ -56,7 +56,7 @@ const onLogin = ()=>{
       setSessionStorage('account',response.data.resultData);
       router.push('/');
    }else{
-      Notify({ 
+      showNotify({ 
         type: 'danger', 
         message: response.data.message ,
         duration: 2000,

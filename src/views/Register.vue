@@ -27,7 +27,6 @@
 </template>
 
 <script setup>
-import { Form, Field, CellGroup, Button } from 'vant'
 import Footer from "@/components/Footer.vue"
 import NavBar from "@/components/NavBar.vue"
 import { ref, reactive } from 'vue'

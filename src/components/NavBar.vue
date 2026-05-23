@@ -8,8 +8,6 @@
   />
 </template>
 <script setup>
-import { NavBar } from 'vant'
-
 defineProps({
   title: {
     type: String
