@@ -7,14 +7,19 @@
     "build": "vue-cli-service build"
   },
   "dependencies": {
+    "@vant/icons": "^3.0.2",
+    "axios": "^1.16.1",
     "core-js": "^3.8.3",
+    "vant": "^3.6.16",
     "vue": "^3.2.13",
     "vue-router": "^4.0.3"
   },
   "devDependencies": {
     "@vue/cli-plugin-babel": "~5.0.0",
     "@vue/cli-plugin-router": "~5.0.0",
-    "@vue/cli-service": "~5.0.0"
+    "@vue/cli-service": "~5.0.0",
+    "less": "^4.6.4",
+    "less-loader": "^12.3.2"
   },
   "browserslist": [
     "> 1%",

@@ -1,19 +1,12 @@
 {
   "compilerOptions": {
-    "target": "es5",
-    "module": "esnext",
-    "baseUrl": "./",
+    "target": "ESNext",
+    "module": "ESNext",
     "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
     "paths": {
-      "@/*": [
-        "src/*"
-      ]
-    },
-    "lib": [
-      "esnext",
-      "dom",
-      "dom.iterable",
-      "scripthost"
-    ]
-  }
+      "@/*": ["./src/*"]
+    }
+  },
+  "include": ["src/**/*"]
 }
